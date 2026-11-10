@@ -1,4 +1,4 @@
-connect_chubbys() (
+function connect_chubbys() (
     local SCAN_SECONDS=30
 
     log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
