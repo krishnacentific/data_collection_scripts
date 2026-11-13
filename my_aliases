@@ -19,7 +19,7 @@ function connect_chubbys() (
 
     # --- 1. Make sure the adapter is up -------------------------------------
     log "Powering on Bluetooth adapter"
-    # rfkill unblock bluetooth 2>/dev/null || true
+    rfkill unblock bluetooth 2>/dev/null || true
     bluetoothctl power on >/dev/null || die "Could not power on the Bluetooth adapter"
 
     # --- 2. Forget every device on the list ---------------------------------
@@ -53,20 +53,36 @@ function connect_chubbys() (
 
     # Pair, trust and connect one MAC.
     pair_trust_connect() {
-        local mac="$1" attempt
-        log "Pairing $mac"
-        if ! bluetoothctl pair "$mac" 2>&1 | grep -qiE "Pairing successful|AlreadyExists"; then
-            warn "Pairing did not report success; continuing anyway"
-        fi
-        log "Trusting $mac"
-        bluetoothctl trust "$mac" >/dev/null || warn "Trust command failed"
-        log "Connecting $mac"
+        local mac="$1" attempt info
+
+        # Like GNOME Settings: one bluetoothctl session with a live pairing
+        # agent, and the device trusted BEFORE pairing, so the Chubby's button
+        # (HID) service is authorised while the link is being set up.
+        log "Trusting, pairing and connecting $mac (takes ~20s)"
+        {
+            echo "agent on"
+            echo "trust $mac";   sleep 1
+            echo "pair $mac";    sleep 10
+            echo "connect $mac"; sleep 8
+            echo "quit"
+        } | bluetoothctl >/dev/null 2>&1
+
+        info="$(bluetoothctl info "$mac" 2>/dev/null)"
+        grep -q "Paired: yes"  <<<"$info" || { warn "Pairing failed"; return 1; }
+        grep -q "Trusted: yes" <<<"$info" || bluetoothctl trust "$mac" >/dev/null
+
+        # Connect (retry if needed), then make sure it stays connected.
         for attempt in 1 2 3; do
-            if bluetoothctl connect "$mac" 2>&1 | grep -qi "Connection successful"; then
+            if ! bluetoothctl info "$mac" 2>/dev/null | grep -q "Connected: yes"; then
+                bluetoothctl connect "$mac" >/dev/null 2>&1
+                sleep 3
+            fi
+            log "Checking the connection holds..."
+            sleep 10
+            if bluetoothctl info "$mac" 2>/dev/null | grep -q "Connected: yes"; then
                 return 0
             fi
-            warn "Connect attempt $attempt failed, retrying..."
-            sleep 3
+            warn "Connection dropped (attempt $attempt), reconnecting..."
         done
         return 1
     }
