@@ -19,7 +19,7 @@ function connect_chubbys() (
 
     # --- 1. Make sure the adapter is up -------------------------------------
     log "Powering on Bluetooth adapter"
-    rfkill unblock bluetooth 2>/dev/null || true
+    # rfkill unblock bluetooth 2>/dev/null || true
     bluetoothctl power on >/dev/null || die "Could not power on the Bluetooth adapter"
 
     # --- 2. Forget every device on the list ---------------------------------
